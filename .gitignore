@@ -1,0 +1,31 @@
+# dependencies
+/abcupon-env/
+/abcupon-env
+abcupon-env
+/venv
+/node_modules
+/.pnp
+.pnp.js
+# Archivos pesados y temporales
+/media
+/media/
+# db.sqlite3
+db copy.sqlite3
+*.log
+# testing
+/coverage
+**/__pycache__/
+*.py[cod]
+*.pyc
+db copy.sqlite3
+# production
+/build
+/backend
+
+# misc
+.DS_Store
+
+
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*

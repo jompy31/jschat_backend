@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Email Preview</title>
+</head>
+<body>
+    <h1>Email Preview</h1>
+    <form action="{% url 'send_email_preview' %}" method="post" enctype="multipart/form-data">
+        {% csrf_token %}
+        <label for="subject">Subject:</label>
+        <input type="text" name="subject" required><br><br>
+
+        <label for="message">Message:</label>
+        <textarea name="message" rows="5" required></textarea><br><br>
+
+        <label for="from_email">From:</label>
+        <input type="email" name="from_email" required><br><br>
+
+        <label for="recipient_list">Recipients (comma-separated):</label>
+        <input type="text" name="recipient_list" required><br><br>
+
+        <label for="attachments">Attachments:</label>
+        <input type="file" name="images" multiple><br><br> <!-- Cambiado el nombre del campo a "images" -->
+
+        <input type="submit" value="Send Email">
+    </form>
+</body>
+</html>
