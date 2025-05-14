@@ -20,7 +20,7 @@ db copy.sqlite3
 db copy.sqlite3
 # production
 /build
-/backend
+# /backend
 
 # misc
 .DS_Store
