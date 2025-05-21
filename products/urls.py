@@ -8,6 +8,7 @@ from .views import (
     CouponListCreateView,
     CouponRetrieveUpdateDestroyView,
     SubProductByEmailView,
+    PointOfSaleSubProductList 
 )
 
 urlpatterns = [
@@ -34,6 +35,7 @@ urlpatterns = [
     path('subproducts/<int:subproduct_id>/businesshours/<int:pk>/', BusinessHourRetrieveUpdateDestroyView.as_view(), name='businesshour-detail'),
     path('subproducts/<int:subproduct_id>/coupons/', CouponListCreateView.as_view(), name='coupon-list-create'),
     path('subproducts/<int:subproduct_id>/coupons/<int:pk>/', CouponRetrieveUpdateDestroyView.as_view(), name='coupon-detail'),
+    path('subproducts/point-of-sale/', PointOfSaleSubProductList.as_view(), name='point-of-sale-subproduct-list'),
 
     path('characteristics/', views.CharacteristicListCreate.as_view(), name='characteristic-list-create'),
     path('characteristics/<int:pk>/', views.CharacteristicRetrieveUpdateDestroy.as_view(), name='characteristic-retrieve-update-destroy'),

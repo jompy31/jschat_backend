@@ -1,442 +1,463 @@
 from rest_framework import generics
-from .models import Product, Characteristic, SubProduct, Service, Combo, TeamMember, BusinessHour, Coupon
-from .serializers import ProductSerializer, CharacteristicSerializer, SubProductSerializer, ServiceSerializer, ComboSerializer, TeamMemberSerializer,  BusinessHourSerializer, CouponSerializer
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework import status
 from rest_framework.views import APIView
-import logging
-from django.db import transaction  
-import json
 from rest_framework.exceptions import ValidationError
-import uuid
+from django.db import transaction
+from django.core.cache import cache
+from django.core.files.storage import default_storage
+from rest_framework.permissions import AllowAny
+from django.conf import settings
+from django.db.models import Prefetch
+import logging
+from datetime import datetime
+import os
+from .models import Product, Characteristic, SubProduct, Service, Combo, TeamMember, BusinessHour, Coupon
+from .serializers import (
+    ProductSerializer, CharacteristicSerializer, SubProductSerializer,
+    ServiceSerializer, ComboSerializer, TeamMemberSerializer,
+    BusinessHourSerializer, CouponSerializer
+)
 
 # Configura el logger
 logger = logging.getLogger(__name__)
 
+class SubProductByEmailView(APIView):
+    def get(self, request, email, format=None):
+        logger.info(f"Fetching subproduct with email: {email}")
+        try:
+            subproduct = SubProduct.objects.prefetch_related(
+                Prefetch('service_set', queryset=Service.objects.all()),
+                Prefetch('team_members', queryset=TeamMember.objects.all()),
+                Prefetch('coupons', queryset=Coupon.objects.all()),
+                Prefetch('business_hours', queryset=BusinessHour.objects.all())
+            ).get(email__iexact=email)
 
-# TeamMember Views
+            service_ids = subproduct.service_set.values_list('id', flat=True)
+            combos = Combo.objects.filter(services__id__in=service_ids).prefetch_related('services').distinct()
+
+            # Pasar el contexto de la solicitud a los serializadores
+            serializer_context = {'request': request}
+
+            subproduct_serializer = SubProductSerializer(subproduct, context=serializer_context)
+            services_serializer = ServiceSerializer(subproduct.service_set.all(), many=True, context=serializer_context)
+            combos_serializer = ComboSerializer(combos, many=True, context=serializer_context)
+            team_members_serializer = TeamMemberSerializer(subproduct.team_members.all(), many=True, context=serializer_context)
+            coupons_serializer = CouponSerializer(subproduct.coupons.all(), many=True, context=serializer_context)
+            business_hours_serializer = BusinessHourSerializer(subproduct.business_hours.all(), many=True, context=serializer_context)
+
+            response_data = {
+                'subproduct': subproduct_serializer.data,
+                'services': services_serializer.data,
+                'combos': combos_serializer.data,
+                'team_members': team_members_serializer.data,
+                'coupons': coupons_serializer.data,
+                'business_hours': business_hours_serializer.data
+            }
+
+            logger.debug(f"Successfully fetched subproduct: {subproduct.name}")
+            return Response(response_data, status=status.HTTP_200_OK)
+        except SubProduct.DoesNotExist:
+            logger.warning(f"Subproduct with email {email} not found")
+            return Response({'error': 'Subproduct not found'}, status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            logger.error(f"Error fetching subproduct with email {email}: {str(e)}", exc_info=True)
+            return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
 class TeamMemberListCreateView(generics.ListCreateAPIView):
     serializer_class = TeamMemberSerializer
 
     def get_queryset(self):
         subproduct_id = self.kwargs['subproduct_id']
-        # Filtra por el campo 'subproducts' en lugar de 'subproduct_id'
-        return TeamMember.objects.filter(subproducts__id=subproduct_id)
+        queryset = TeamMember.objects.filter(subproducts=subproduct_id)
+        return queryset
+
+    def list(self, request, *args, **kwargs):
+        cache_key = f'teammembers_subproduct_{self.kwargs["subproduct_id"]}'
+        cached_data = cache.get(cache_key)
+        if cached_data:
+            return Response(cached_data)
+
+        queryset = self.filter_queryset(self.get_queryset())
+        serialized_data = TeamMemberSerializer(queryset, many=True).data
+        cache.set(cache_key, serialized_data, timeout=3600)
+        return Response(serialized_data)
 
     def perform_create(self, serializer):
         subproduct_id = self.kwargs['subproduct_id']
-        subproduct = SubProduct.objects.get(pk=subproduct_id)
-        serializer.save(subproduct=subproduct)
+        try:
+            subproduct = SubProduct.objects.get(id=subproduct_id)
+            instance = serializer.save()
+            instance.subproducts.add(subproduct)
+            cache.delete(f'teammembers_subproduct_{subproduct_id}')
+        except SubProduct.DoesNotExist:
+            return Response(
+                {"error": "SubProduct not found"},
+                status=status.HTTP_404_NOT_FOUND
+            )
 
 class TeamMemberRetrieveUpdateDestroyView(generics.RetrieveUpdateDestroyAPIView):
     queryset = TeamMember.objects.all()
     serializer_class = TeamMemberSerializer
 
+    def perform_destroy(self, instance):
+        subproduct_id = instance.subproducts.first().id
+        super().perform_destroy(instance)
+        cache.delete(f'teammembers_subproduct_{subproduct_id}')
 
-# BusinessHour Views
 class BusinessHourListCreateView(generics.ListCreateAPIView):
     serializer_class = BusinessHourSerializer
 
     def get_queryset(self):
         subproduct_id = self.kwargs['subproduct_id']
-        return BusinessHour.objects.filter(subproducts__id=subproduct_id)
+        cache_key = f'businesshours_subproduct_{subproduct_id}'
+        cached_data = cache.get(cache_key)
+        if cached_data:
+            return BusinessHour.objects.filter(id__in=[item['id'] for item in cached_data])
+        queryset = BusinessHour.objects.filter(subproducts__id=subproduct_id)
+        serialized_data = BusinessHourSerializer(queryset, many=True).data
+        cache.set(cache_key, serialized_data, timeout=3600)
+        return queryset
 
     def perform_create(self, serializer):
         subproduct_id = self.kwargs['subproduct_id']
         subproduct = SubProduct.objects.get(pk=subproduct_id)
         serializer.save(subproduct=subproduct)
-
+        cache.delete(f'businesshours_subproduct_{subproduct_id}')
 
 class BusinessHourRetrieveUpdateDestroyView(generics.RetrieveUpdateDestroyAPIView):
     queryset = BusinessHour.objects.all()
     serializer_class = BusinessHourSerializer
 
+    def perform_destroy(self, instance):
+        subproduct_id = instance.subproducts.first().id
+        super().perform_destroy(instance)
+        cache.delete(f'businesshours_subproduct_{subproduct_id}')
 
-# Coupon Views
 class CouponListCreateView(generics.ListCreateAPIView):
     serializer_class = CouponSerializer
 
     def get_queryset(self):
         subproduct_id = self.kwargs['subproduct_id']
-        return Coupon.objects.filter(subproducts__id=subproduct_id)
+        queryset = Coupon.objects.filter(subproducts=subproduct_id)
+        return queryset
+
+    def list(self, request, *args, **kwargs):
+        cache_key = f'coupons_subproduct_{self.kwargs["subproduct_id"]}'
+        cached_data = cache.get(cache_key)
+        if cached_data:
+            return Response(cached_data)
+
+        queryset = self.filter_queryset(self.get_queryset())
+        serialized_data = CouponSerializer(queryset, many=True).data
+        cache.set(cache_key, serialized_data, timeout=3600)
+        return Response(serialized_data)
 
     def perform_create(self, serializer):
         subproduct_id = self.kwargs['subproduct_id']
-        subproduct = SubProduct.objects.get(pk=subproduct_id)
-        serializer.save(subproduct=subproduct)
-
+        try:
+            subproduct = SubProduct.objects.get(id=subproduct_id)
+            instance = serializer.save()
+            instance.subproducts.add(subproduct)
+            cache.delete(f'coupons_subproduct_{subproduct_id}')
+        except SubProduct.DoesNotExist:
+            return Response(
+                {"error": "SubProduct not found"},
+                status=status.HTTP_404_NOT_FOUND
+            )
 
 class CouponRetrieveUpdateDestroyView(generics.RetrieveUpdateDestroyAPIView):
     queryset = Coupon.objects.all()
     serializer_class = CouponSerializer
 
+    def perform_destroy(self, instance):
+        subproduct_id = instance.subproducts.first().id
+        super().perform_destroy(instance)
+        cache.delete(f'coupons_subproduct_{subproduct_id}')
+
 class SubProductListCreate(generics.ListCreateAPIView):
-    queryset = SubProduct.objects.all()
-    serializer_class = SubProductSerializer
-
-    def post(self, request, *args, **kwargs):
-        print("Datos recibidos:", request.data)
-
-        # Obtener los datos de la solicitud
-        name = request.data.get('name')
-        phone = request.data.get('phone')
-        email = request.data.get('email')
-        address = request.data.get('address')
-        addressmap = request.data.get('addressmap')
-        url = request.data.get('url')
-        description = request.data.get('description')
-        country = request.data.get('country')
-        province = request.data.get('province')
-        canton = request.data.get('canton')
-        distrito = request.data.get('distrito')
-        contact_name = request.data.get('contact_name')
-        phone_number = request.data.get('phone_number')
-        constitucion = request.data.get('constitucion')
-        comercial_activity = request.data.get('comercial_activity')
-        pay_method = request.data.get('pay_method')
-
-        # Primero procesamos los productos recibidos como string
-        products = request.data.get('products', '')  # Obtener los productos como un string
-        print("Productos recibidos como string:", products)
-
-        # Dividir el string en una lista de IDs
-        product_ids = products.split(',') if products else []
-        print("Productos procesados como lista:", product_ids)
-
-        product_objects = []
-        for product_id in product_ids:
-            print(f"Procesando producto con ID: {product_id}")
-            try:
-                product = Product.objects.get(id=product_id)
-                print(f"Producto encontrado: {product}")
-                product_objects.append(product)
-            except Product.DoesNotExist:
-                print(f"Producto con ID {product_id} no encontrado.")
-                return Response({"error": f"Producto con ID {product_id} no encontrado."}, status=status.HTTP_400_BAD_REQUEST)
-
-        # Verificar que se han agregado productos correctamente
-        print("Productos que se van a asociar al subproducto:", product_objects)
-
-        # Crear el subproducto
-        with transaction.atomic():
-            print("Creando subproducto...")
-            subproduct = SubProduct.objects.create(
-                name=name, phone=phone, email=email, address=address, addressmap=addressmap, 
-                url=url, description=description, country=country, province=province, 
-                canton=canton, distrito=distrito, contact_name=contact_name, 
-                phone_number=phone_number, constitucion=constitucion, 
-                comercial_activity=comercial_activity, pay_method=pay_method
-            )
-            print(f"Subproducto creado con ID: {subproduct.id}")
-
-            # Asociar los productos procesados al subproducto
-            subproduct.products.set(product_objects)
-
-            # Procesar y crear horarios de trabajo
-            business_hours_data = request.data.get('business_hours')
-            business_hours_ids = []
-            if business_hours_data:
-                try:
-                    business_hours_data = json.loads(business_hours_data)
-                    for day, times in business_hours_data.items():
-                        business_hour = BusinessHour.objects.create(
-                            day=day, start_time=times.get('start'), end_time=times.get('end')
-                        )
-                        business_hours_ids.append(business_hour.id)
-                except json.JSONDecodeError:
-                    return Response({"error": "Formato incorrecto en business_hours."}, status=status.HTTP_400_BAD_REQUEST)
-
-            # Procesar y crear miembros del equipo
-            team_members_ids = []
-            for i in range(len(request.data.getlist('team_members[0][name]'))):
-                member = TeamMember.objects.create(
-                    name=request.data.get(f'team_members[{i}][name]'),
-                    position=request.data.get(f'team_members[{i}][position]'),
-                    photo=request.FILES.get(f'team_members[{i}][photo]')
-                )
-                team_members_ids.append(member.id)
-
-            # Procesar y crear cupones
-            coupons_ids = []
-            for i in range(len(request.data.getlist('coupons[0][code]'))):
-                coupon = Coupon.objects.create(
-                    code=request.data.get(f'coupons[{i}][code]'),
-                    description=request.data.get(f'coupons[{i}][description]'),
-                    image=request.FILES.get(f'coupons[{i}][image]')
-                )
-                coupons_ids.append(coupon.id)
-
-            # Ahora asociar estos IDs al subproducto
-            subproduct.business_hours.set(business_hours_ids)
-            subproduct.team_members.set(team_members_ids)
-            subproduct.coupons.set(coupons_ids)
-
-            print(f"Subproducto {subproduct.id} asociado con horarios, miembros y cupones.")
-            
-            return Response({"message": "SubProduct creado correctamente", "subproduct_id": subproduct.id}, status=status.HTTP_201_CREATED)
-
-
-class SubProductRetrieveUpdate(generics.RetrieveUpdateAPIView):
-    queryset = SubProduct.objects.all()
+    permission_classes = [AllowAny]
     serializer_class = SubProductSerializer
     
+    def get_queryset(self):
+        cache_key = 'subproducts_all'
+        cached_data = cache.get(cache_key)
+        if cached_data:
+            return SubProduct.objects.filter(id__in=[item['id'] for item in cached_data])
+        queryset = SubProduct.objects.all().prefetch_related(
+            'products', 'business_hours', 'team_members', 'coupons'
+        )
+        serialized_data = SubProductSerializer(queryset, many=True).data
+        cache.set(cache_key, serialized_data, timeout=3600)
+        return queryset
+
+    def post(self, request, *args, **kwargs):
+        print("=== Received POST request to create SubProduct ===")
+        print("Raw request data1:", request.data)
+        print("Raw request data:", dict(request.data))
+        print("Files received:", request.FILES)
+
+        serializer = self.get_serializer(data=request.data)
+        if not serializer.is_valid():
+            print("Validation errors:", serializer.errors)
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+        print("Validated data:", serializer.validated_data)
+
+        try:
+            with transaction.atomic():
+                # Crear el subproducto usando el serializador
+                subproduct = serializer.save()
+                print(f"SubProduct created with ID: {subproduct.id}")
+                print(f"Associated products: {subproduct.products.all()}")
+                print(f"Associated business hours: {subproduct.business_hours.all()}")
+                print(f"Associated team members: {subproduct.team_members.all()}")
+                print(f"Associated coupons: {subproduct.coupons.all()}")
+
+                # Invalidar caché
+                cache.delete('subproducts_all')
+                print("Cache invalidated for 'subproducts_all'")
+
+            return Response(
+                {
+                    "message": "SubProduct created successfully",
+                    "subproduct_id": subproduct.id,
+                    "data": SubProductSerializer(subproduct).data
+                },
+                status=status.HTTP_201_CREATED
+            )
+        except Exception as e:
+            print(f"Error creating SubProduct: {str(e)}")
+            logger.error(f"Error in SubProductListCreate.post: {str(e)}", exc_info=True)
+            return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+class SubProductRetrieveUpdate(generics.RetrieveUpdateAPIView):
+    queryset = SubProduct.objects.all().prefetch_related(
+        'products', 'business_hours', 'team_members', 'coupons'
+    )
+    serializer_class = SubProductSerializer
+
+    def get_object(self):
+        pk = self.kwargs['pk']
+        cache_key = f'subproduct_{pk}'
+        cached_data = cache.get(cache_key)
+        if cached_data:
+            return SubProduct.objects.get(id=cached_data['id'])
+        obj = super().get_object()
+        serialized_data = SubProductSerializer(obj).data
+        cache.set(cache_key, serialized_data, timeout=3600)
+        return obj
+
+    def update(self, request, *args, **kwargs):
+        print("=== Received PUT/PATCH request to update SubProduct ===")
+        print("Raw request data:", dict(request.data))
+        print("Files received:", request.FILES)
+
+        partial = kwargs.pop('partial', False)
+        instance = self.get_object()
+        serializer = self.get_serializer(instance, data=request.data, partial=partial)
+        try:
+            serializer.is_valid(raise_exception=True)
+        except Exception as e:
+            print("Validation errors:", serializer._errors if hasattr(serializer, '_errors') else str(e))
+            return Response({"error": str(e), "details": serializer._errors if hasattr(serializer, '_errors') else {}}, status=status.HTTP_400_BAD_REQUEST)
+
+        print("Validated data:", serializer.validated_data)
+
+        try:
+            with transaction.atomic():
+                # Actualizar el subproducto usando el serializador
+                subproduct = serializer.save()
+                print(f"SubProduct updated with ID: {subproduct.id}")
+                print(f"Associated products: {subproduct.products.all()}")
+                print(f"Associated business hours: {subproduct.business_hours.all()}")
+                print(f"Associated team members: {subproduct.team_members.all()}")
+                print(f"Associated coupons: {subproduct.coupons.all()}")
+
+                # Invalidar caché
+                cache.delete('subproducts_all')
+                cache.delete(f'subproduct_{subproduct.id}')
+                print(f"Cache invalidated for 'subproducts_all' and 'subproduct_{subproduct.id}'")
+
+            return Response(
+                {
+                    "message": "SubProduct updated successfully",
+                    "subproduct_id": subproduct.id,
+                    "data": SubProductSerializer(subproduct).data
+                },
+                status=status.HTTP_200_OK
+            )
+        except Exception as e:
+            print(f"Error updating SubProduct: {str(e)}")
+            logger.error(f"Error in SubProductRetrieveUpdate.update: {str(e)}", exc_info=True)
+            return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 class SubProductDestroy(generics.DestroyAPIView):
     queryset = SubProduct.objects.all()
     serializer_class = SubProductSerializer
 
     def perform_destroy(self, instance):
-        
-        product_names = instance.product_names.split(',')
-        
-        
+        product_names = instance.product_names.split(',') if instance.product_names else []
         if "nombre_producto_a_eliminar" in product_names:
             product_names.remove("nombre_producto_a_eliminar")
-        
-        instance.product_names = ','.join(product_names)
+            instance.product_names = ','.join(product_names)
+            instance.save()
         instance.delete()
-
-
-class SubProductCreateOrUpdate(generics.CreateAPIView, generics.UpdateAPIView):
-    queryset = SubProduct.objects.all()
-    serializer_class = SubProductSerializer
-
-    def perform_create(self, serializer):
-        product_id = self.kwargs.get('product_id')
-        product = Product.objects.get(pk=product_id)
-        serializer.save(product=product)
-
-    def update(self, request, *args, **kwargs):
-        partial = kwargs.pop('partial', False)
-        product_id = self.kwargs.get('product_id')
-        product = Product.objects.get(pk=product_id)
-        instance = self.get_object()
-        serializer = self.get_serializer(instance, data=request.data, partial=partial)
-        serializer.is_valid(raise_exception=True)
-        serializer.save(product=product)
-        return Response(serializer.data)
-
-    def add_product_name(self, instance, product_name):
-        if not instance.product_names:
-            instance.product_names = product_name
-        else:
-            product_names_list = instance.product_names.split(',')
-            if product_name not in product_names_list:
-                product_names_list.append(product_name)
-                instance.product_names = ','.join(product_names_list)
-
-    def remove_product_name(self, instance, product_name):
-        if instance.product_names:
-            product_names_list = instance.product_names.split(',')
-            if product_name in product_names_list:
-                product_names_list.remove(product_name)
-                instance.product_names = ','.join(product_names_list)
-
-class ServiceDeleteView(APIView):
-    def delete(self, request, subproducts_id, service_id):  
-        try:
-            service = Service.objects.get(id=service_id, subproduct_id=subproducts_id)  
-            service.delete()
-            return Response({"message": "Service deleted successfully"}, status=status.HTTP_204_NO_CONTENT)
-        except Service.DoesNotExist:
-            return Response({"message": "Service not found"}, status=status.HTTP_404_NOT_FOUND)
-
+        cache.delete('subproducts_all')
+        cache.delete(f'subproduct_{instance.id}')
 
 class SubProductServicesView(generics.ListCreateAPIView):
-    queryset = Service.objects.all()
     serializer_class = ServiceSerializer
 
     def get_queryset(self):
         subproduct_id = self.kwargs['subproduct_id']
-        return Service.objects.filter(subproduct_id=subproduct_id)
+        cache_key = f'services_subproduct_{subproduct_id}'
+        cached_data = cache.get(cache_key)
+        if cached_data:
+            return Service.objects.filter(id__in=[item['id'] for item in cached_data])
+        queryset = Service.objects.filter(subproduct_id=subproduct_id)
+        serialized_data = ServiceSerializer(queryset, many=True).data
+        cache.set(cache_key, serialized_data, timeout=3600)
+        return queryset
 
-    def put(self, request, subproduct_id, *args, **kwargs):
-        service_id = kwargs.get('service_id')
-        
-        try:
-            service = Service.objects.get(id=service_id, subproduct_id=subproduct_id)
-        except Service.DoesNotExist:
-            return Response({"message": "Service not found"}, status=status.HTTP_404_NOT_FOUND)
-
-        serializer = ServiceSerializer(service, data=request.data)
-        if serializer.is_valid():
-            serializer.save()
-            return Response(serializer.data, status=status.HTTP_200_OK)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-    
-    def delete(self, request, subproduct_id, service_id, *args, **kwargs):
-        try:
-            service = Service.objects.get(id=service_id, subproduct_id=subproduct_id)
-        except Service.DoesNotExist:
-            return Response({"message": "Service not found"}, status=status.HTTP_404_NOT_FOUND)
-
-        service.delete()
-        return Response({"message": "Service deleted successfully"}, status=status.HTTP_204_NO_CONTENT)
-    
-class SubProductServicesList(APIView):
-    def get(self, request, subproduct_id):
-        try:
-            services = Service.objects.filter(subproduct_id=subproduct_id)
-            serializer = ServiceSerializer(services, many=True)
-            return Response(serializer.data, status=status.HTTP_200_OK)
-        except Service.DoesNotExist:
-            return Response({"message": "Services not found for the subproduct"}, status=status.HTTP_404_NOT_FOUND)
-
-    def post(self, request, subproduct_id):
-        print(request.data)
+    def perform_create(self, serializer):
+        subproduct_id = self.kwargs['subproduct_id']
         try:
             subproduct = SubProduct.objects.get(id=subproduct_id)
-        except SubProduct.DoesNotExist:
-            return Response({"message": "Subproduct not found"}, status=status.HTTP_404_NOT_FOUND)
-
-        serializer = ServiceSerializer(data=request.data)
-        if serializer.is_valid():
+            # Asignar el subproducto al servicio
             serializer.save(subproduct=subproduct)
-            return Response(serializer.data, status=status.HTTP_201_CREATED)
+            cache.delete(f'services_subproduct_{subproduct_id}')
+        except SubProduct.DoesNotExist:
+            return Response(
+                {"error": "SubProduct not found"},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+    def put(self, request, subproduct_id, *args, **kwargs):
+        service_id = request.data.get('service_id')
+        try:
+            service = Service.objects.get(id=service_id, subproduct_id=subproduct_id)
+        except Service.DoesNotExist:
+            return Response({"message": "Service not found"}, status=status.HTTP_404_NOT_FOUND)
+
+        serializer = ServiceSerializer(service, data=request.data, partial=True)
+        if serializer.is_valid():
+            serializer.save()
+            cache.delete(f'services_subproduct_{subproduct_id}')
+            return Response(serializer.data, status=status.HTTP_200_OK)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-    
+
+class ServiceDeleteView(APIView):
+    def delete(self, request, subproducts_id, service_id):
+        try:
+            service = Service.objects.get(id=service_id, subproduct_id=subproducts_id)
+            service.delete()
+            cache.delete(f'services_subproduct_{subproducts_id}')
+            return Response({"message": "Service deleted successfully"}, status=status.HTTP_204_NO_CONTENT)
+        except Service.DoesNotExist:
+            return Response({"message": "Service not found"}, status=status.HTTP_404_NOT_FOUND)
+
+class SubProductServicesListAll(APIView):
+    permission_classes = [AllowAny]
+    def get(self, request):
+        cache_key = 'services_all'
+        cached_data = cache.get(cache_key)
+        if cached_data:
+            return Response(cached_data, status=status.HTTP_200_OK)
+        services = Service.objects.all().select_related('subproduct')
+        serialized_data = ServiceSerializer(services, many=True).data
+        cache.set(cache_key, serialized_data, timeout=3600)
+        return Response(serialized_data, status=status.HTTP_200_OK)
+
 class ComboListCreate(generics.ListCreateAPIView):
     serializer_class = ComboSerializer
-    queryset = Combo.objects.all()
+    queryset = Combo.objects.all().prefetch_related('services')
 
     def create(self, request, *args, **kwargs):
-        logger.info("Datos recibidos para crear combo: %s", request.data)
-
-        # Validar datos
-        name = request.data.get('name')
-        description = request.data.get('description')
-        price = request.data.get('price')
-        selected_service_ids = request.data.get('selectedServiceIds', [])
-
-        # Validaciones y log de errores
-        if not name:
-            logger.error("Falta el nombre del combo")
-            return Response({'error': 'Falta el nombre del combo'}, status=status.HTTP_400_BAD_REQUEST)
-
-        if not description:
-            logger.error("Falta la descripción del combo")
-            return Response({'error': 'Falta la descripción del combo'}, status=status.HTTP_400_BAD_REQUEST)
-
-        if price is None:
-            logger.error("Falta el precio del combo")
-            return Response({'error': 'Falta el precio del combo'}, status=status.HTTP_400_BAD_REQUEST)
-
-        try:
-            price = float(price)  # Convertir a float
-        except ValueError:
-            logger.error("El precio debe ser un número válido")
-            return Response({'error': 'El precio debe ser un número válido'}, status=status.HTTP_400_BAD_REQUEST)
-
-        if not selected_service_ids:
-            logger.error("Faltan IDs de servicios seleccionados")
-            return Response({'error': 'Faltan IDs de servicios seleccionados'}, status=status.HTTP_400_BAD_REQUEST)
-
-        # Crear el combo
-        combo_data = {
-            'name': name,
-            'description': description,
-            'price': price
-        }
-
-        serializer = self.get_serializer(data=combo_data)
+        serializer = self.get_serializer(data=request.data)
         if not serializer.is_valid():
-            logger.error("Errores de validación: %s", serializer.errors)
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-        combo = serializer.save()
+        name = serializer.validated_data.get('name')
+        description = serializer.validated_data.get('description')
+        price = serializer.validated_data.get('price')
+        subproduct = serializer.validated_data.get('subproduct')
+        selected_service_ids = request.data.get('selectedServiceIds', [])
 
-        # Agregar los servicios seleccionados
-        for service_id in selected_service_ids:
-            try:
-                service = Service.objects.get(id=service_id)
-                combo.services.add(service)
-            except Service.DoesNotExist:
-                logger.error("Servicio con ID %s no existe", service_id)
-                return Response({'error': f'Servicio con ID {service_id} no existe'}, status=status.HTTP_400_BAD_REQUEST)
+        if not all([name, description, price, subproduct]):
+            return Response({"error": "All fields (name, description, price, subproduct) are required"}, status=status.HTTP_400_BAD_REQUEST)
 
-        logger.info("Combo creado exitosamente: %s", combo)
-        return Response(serializer.data, status=status.HTTP_201_CREATED)
+        try:
+            price = float(price)
+        except ValueError:
+            return Response({"error": "Price must be a valid number"}, status=status.HTTP_400_BAD_REQUEST)
 
+        with transaction.atomic():
+            # Crear el combo con el subproducto
+            combo = Combo.objects.create(
+                name=name,
+                description=description,
+                price=price,
+                subproduct=subproduct
+            )
+            for service_id in selected_service_ids:
+                try:
+                    service = Service.objects.get(id=service_id, subproduct=subproduct)
+                    combo.services.add(service)
+                except Service.DoesNotExist:
+                    return Response({"error": f"Service with ID {service_id} not found or not associated with the specified subproduct"}, status=status.HTTP_400_BAD_REQUEST)
+
+        cache.delete('combos_all')
+        return Response(ComboSerializer(combo).data, status=status.HTTP_201_CREATED)
 
 class ComboRetrieveUpdateDestroy(generics.RetrieveUpdateDestroyAPIView):
-    queryset = Combo.objects.all()
+    queryset = Combo.objects.all().prefetch_related('services')
     serializer_class = ComboSerializer
 
+    def perform_destroy(self, instance):
+        instance.delete()
+        cache.delete('combos_all')
 
 class ProductListCreate(generics.ListCreateAPIView):
     serializer_class = ProductSerializer
-    queryset = Product.objects.all()
+    queryset = Product.objects.all().prefetch_related('characteristics', 'subproducts')
 
     def perform_create(self, serializer):
-        file = self.request.data.get('file')
-        file1 = self.request.data.get('file1')
-        name = self.request.data.get('name')
-        description = self.request.data.get('description')
         characteristics_ids = self.request.data.getlist('characteristics', [])
-
-        if file and name:
-            product = serializer.save(user=self.request.user, file=file, file1=file1, name=name, description=description)
-
-            if characteristics_ids:
+        product = serializer.save(user=self.request.user)
+        if characteristics_ids:
+            for char_id in characteristics_ids:
                 try:
-                    characteristics_ids = [int(char_id) for char_id in characteristics_ids]
-                except ValueError:
-                    return Response({'error': 'Invalid characteristic ID(s)'}, status=status.HTTP_400_BAD_REQUEST)
-
-                for char_id in characteristics_ids:
-                    try:
-                        char = Characteristic.objects.get(pk=char_id)
-                        if char not in product.characteristics.all():
-                            product.characteristics.add(char)
-                    except Characteristic.DoesNotExist:
-                        return Response({'error': f'Characteristic with ID {char_id} does not exist'}, status=status.HTTP_400_BAD_REQUEST)
-            
-        else:
-            serializer.save(user=self.request.user)
+                    char = Characteristic.objects.get(pk=char_id)
+                    product.characteristics.add(char)
+                except Characteristic.DoesNotExist:
+                    pass
+        cache.delete('products_all')
 
 class ProductRetrieveUpdate(generics.RetrieveUpdateAPIView):
-    queryset = Product.objects.all()
+    queryset = Product.objects.all().prefetch_related('characteristics', 'subproducts')
     serializer_class = ProductSerializer
 
-    def update(self, request, *args, **kwargs):
-        partial = kwargs.pop('partial', False)
-        instance = self.get_object()
-        serializer = self.get_serializer(instance, data=request.data, partial=partial)
-        serializer.is_valid(raise_exception=True)
-
-        print("Datos recibidos para actualización:", request.data)
-
-        # Extraer y manejar características
-        characteristics_data = request.data.get('characteristics', [])
-        print("Características recibidas:", characteristics_data)
-
-        if isinstance(characteristics_data, list) and characteristics_data:
-            instance.characteristics.clear()  
-            for char_data in characteristics_data:
-                if isinstance(char_data, dict) and 'id' in char_data:
-                    char, _ = Characteristic.objects.get_or_create(
-                        id=char_data['id'],
-                        defaults={
-                            'name': char_data.get('name'),
-                            'description': char_data.get('description')
-                        }
-                    )
-                    instance.characteristics.add(char)
-                else:
-                    print("Datos incorrectos para características:", char_data)
-        else:
-            print("No se recibieron características o el formato es incorrecto:", characteristics_data)
-
-        serializer.save()
-        return Response(serializer.data)
-
-
-
+    def get_object(self):
+        pk = self.kwargs['pk']
+        cache_key = f'product_{pk}'
+        cached_data = cache.get(cache_key)
+        if cached_data:
+            return Product.objects.get(id=cached_data['id'])
+        obj = super().get_object()
+        serialized_data = ProductSerializer(obj).data
+        cache.set(cache_key, serialized_data, timeout=3600)
+        return obj
 
 class ProductDestroy(generics.DestroyAPIView):
     queryset = Product.objects.all()
     serializer_class = ProductSerializer
+
+    def perform_destroy(self, instance):
+        instance.delete()
+        cache.delete('products_all')
+        cache.delete(f'product_{instance.id}')
 
 class CharacteristicListCreate(generics.ListCreateAPIView):
     serializer_class = CharacteristicSerializer
@@ -449,12 +470,3 @@ class CharacteristicRetrieveUpdateDestroy(generics.RetrieveUpdateDestroyAPIView)
 class CharacteristicDestroy(generics.DestroyAPIView):
     queryset = Characteristic.objects.all()
     serializer_class = CharacteristicSerializer
-
-class SubProductServicesListAll(APIView):
-    def get(self, request):
-        try:
-            services = Service.objects.all()
-            serializer = ServiceSerializer(services, many=True)
-            return Response(serializer.data, status=status.HTTP_200_OK)
-        except Service.DoesNotExist:
-            return Response({"message": "Services not found"}, status=status.HTTP_404_NOT_FOUND)

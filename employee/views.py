@@ -226,21 +226,13 @@ class ExperienceLevelListView(generics.ListCreateAPIView):
     permission_classes = [AllowAny]
 
     def create(self, request, *args, **kwargs):
-        # Imprime los datos que recibe del frontend
-        print("Datos recibidos del frontend:", request.data)
-
-        # Extraer el valor del QueryDict
-        level = request.data.get('level')
-
-        # Asegúrate de que el valor no sea None o una lista
-        if isinstance(level, list):
-            level = level[0]  # Obtén el primer elemento si es una lista
-
-        # Ahora puedes crear la instancia de ExperienceLevel
-        experience_level_instance = ExperienceLevel(level=level)
-        experience_level_instance.save()
-
-        return super().create(request, *args, **kwargs)
+        print("Datos recibidos del frontend:", request.data)  # Log received data
+        serializer = self.get_serializer(data=request.data)
+        if serializer.is_valid():
+            self.perform_create(serializer)
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        print("Errores de validación:", serializer.errors)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
 class ExperienceLevelDetailView(generics.RetrieveUpdateDestroyAPIView):

@@ -26,6 +26,19 @@ class ExperienceLevelSerializer(serializers.ModelSerializer):
         model = ExperienceLevel
         fields = ['id', 'level']
 
+    def validate_level(self, value):
+        # Check if an ExperienceLevel with this level already exists
+        if ExperienceLevel.objects.filter(level=value).exists():
+            raise serializers.ValidationError(f"An ExperienceLevel with level '{value}' already exists.")
+        return value
+
+    def create(self, validated_data):
+        # Use get_or_create to ensure no duplicates are created
+        experience_level, created = ExperienceLevel.objects.get_or_create(
+            level=validated_data['level']
+        )
+        return experience_level
+
 # Serializador para el modelo de Skill
 class SkillSerializer(serializers.ModelSerializer):
     class Meta:

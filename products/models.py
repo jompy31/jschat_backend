@@ -86,8 +86,8 @@ class SubProduct(models.Model):
     image = models.ImageField(upload_to='subproducts/', blank=True)
     url = models.URLField(blank=True)
     products = models.ManyToManyField('Product', related_name='subproducts', blank=True)
-    subcategory = models.TextField(max_length=400, null=True, blank=True)
-    subsubcategory = models.TextField(max_length=400, null=True, blank=True)
+    subcategory = models.TextField( null=True, blank=True)
+    subsubcategory = models.TextField( null=True, blank=True)
     product_names = models.TextField(blank=True)  # New variable to store product names
     description = models.TextField(blank=True, null=True)
     country = models.CharField(max_length=50, blank=True, null=True)
@@ -106,6 +106,7 @@ class SubProduct(models.Model):
     business_hours = models.ManyToManyField(BusinessHour, related_name='subproducts', blank=True)
     team_members = models.ManyToManyField(TeamMember, related_name='subproducts', blank=True)
     certified = models.BooleanField(default=False)
+    point_of_sale = models.BooleanField(default=False)
     coupons = models.ManyToManyField(Coupon, related_name='subproducts', blank=True)
 
     def __str__(self):

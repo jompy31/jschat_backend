@@ -107,9 +107,17 @@ class SubProductSerializer(serializers.ModelSerializer):
             'description', 'country', 'province', 'canton', 'distrito', 'constitucion',
             'contact_name', 'phone_number', 'comercial_activity', 'pay_method', 'logo',
             'file', 'products', 'product_names', 'subcategory', 'subsubcategory',
-            'team_members', 'business_hours', 'coupons', 'certified', 'services'
+            'team_members', 'business_hours', 'coupons', 'certified', 'services','point_of_sale'
         ]
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Exclude relations for GET requests if specified in context
+        if self.context.get('exclude_relations', False):
+            self.fields.pop('team_members', None)
+            self.fields.pop('business_hours', None)
+            self.fields.pop('coupons', None)
+            
     def to_internal_value(self, data):
         logger.debug(f"to_internal_value: Original data: {data}")
 
@@ -275,6 +283,8 @@ class SubProductSerializer(serializers.ModelSerializer):
 
         if 'certified' in mutable_data and isinstance(mutable_data['certified'], str):
             mutable_data['certified'] = mutable_data['certified'].lower() == 'true'
+        if 'point_of_sale' in mutable_data and isinstance(mutable_data['point_of_sale'], str):
+            mutable_data['point_of_sale'] = mutable_data['point_of_sale'].lower() == 'true'
 
         logger.debug(f"to_internal_value: Mutable data before super().to_internal_value: {mutable_data}")
         internal_data = super().to_internal_value(mutable_data)

@@ -9,7 +9,7 @@ abcupon-env
 # Archivos pesados y temporales
 /media
 /media/
-# db.sqlite3
+db.sqlite3
 db copy.sqlite3
 *.log
 # testing
@@ -20,7 +20,6 @@ db copy.sqlite3
 db copy.sqlite3
 # production
 /build
-# /backend
 
 # misc
 .DS_Store

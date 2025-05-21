@@ -34,7 +34,7 @@ class CouponInline(admin.TabularInline):
 
 @admin.register(SubProduct)
 class SubProductAdmin(admin.ModelAdmin):
-    list_display = ('id', 'name', 'phone', 'email', 'address', 'url', 'product_names', 'addressmap', 'constitucion', 'certified')
+    list_display = ('id', 'name', 'phone', 'email', 'address', 'url', 'product_names', 'addressmap', 'constitucion', 'certified', 'point_of_sale')
     search_fields = ('name', 'product_names', 'email', 'address')
     list_filter = ('certified', 'country', 'province', 'canton', 'distrito')
     inlines = [BusinessHourInline, TeamMemberInline, CouponInline]
@@ -46,7 +46,7 @@ class SubProductAdmin(admin.ModelAdmin):
             'fields': ('country', 'province', 'canton', 'distrito')
         }),
         ('Other Details', {
-            'fields': ('constitucion', 'contact_name', 'phone_number', 'comercial_activity', 'pay_method', 'logo', 'file', 'certified')
+            'fields': ('constitucion', 'contact_name', 'phone_number', 'comercial_activity', 'pay_method', 'logo', 'file', 'certified', 'point_of_sale')
         }),
     )
 

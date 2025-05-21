@@ -35,7 +35,7 @@ class SubProductByEmailView(APIView):
             ).get(email__iexact=email)
 
             service_ids = subproduct.service_set.values_list('id', flat=True)
-            combos = Combo.objects.filter(services__id__in=service_ids).prefetch_related('services').distinct()
+            combos = Combo.objects.filter(subproduct=subproduct).prefetch_related('services')
 
             # Pasar el contexto de la solicitud a los serializadores
             serializer_context = {'request': request}
@@ -176,6 +176,36 @@ class CouponRetrieveUpdateDestroyView(generics.RetrieveUpdateDestroyAPIView):
         super().perform_destroy(instance)
         cache.delete(f'coupons_subproduct_{subproduct_id}')
 
+
+class PointOfSaleSubProductList(generics.ListAPIView):
+    permission_classes = [AllowAny]
+    serializer_class = SubProductSerializer
+    
+    def get_queryset(self):
+        cache_key = 'subproducts_point_of_sale'
+        cached_data = cache.get(cache_key)
+        if cached_data:
+            return SubProduct.objects.filter(id__in=[item['id'] for item in cached_data]).order_by('name')
+        # Only prefetch products, exclude business_hours, team_members, coupons
+        queryset = SubProduct.objects.filter(point_of_sale=True).prefetch_related('products').order_by('name')
+        serialized_data = SubProductSerializer(
+            queryset, 
+            many=True, 
+            context={'request': self.request, 'exclude_relations': True}
+        ).data
+        cache.set(cache_key, serialized_data, timeout=3600)
+        return queryset
+
+    def list(self, request, *args, **kwargs):
+        try:
+            queryset = self.filter_queryset(self.get_queryset())
+            serializer = self.get_serializer(queryset, many=True)
+            logger.debug("Successfully fetched subproducts with point_of_sale=True")
+            return Response(serializer.data, status=200)
+        except Exception as e:
+            logger.error(f"Error fetching subproducts with point_of_sale=True: {str(e)}", exc_info=True)
+            return Response({"error": str(e)}, status=500)
+
 class SubProductListCreate(generics.ListCreateAPIView):
     permission_classes = [AllowAny]
     serializer_class = SubProductSerializer
@@ -184,11 +214,14 @@ class SubProductListCreate(generics.ListCreateAPIView):
         cache_key = 'subproducts_all'
         cached_data = cache.get(cache_key)
         if cached_data:
-            return SubProduct.objects.filter(id__in=[item['id'] for item in cached_data])
-        queryset = SubProduct.objects.all().prefetch_related(
-            'products', 'business_hours', 'team_members', 'coupons'
-        )
-        serialized_data = SubProductSerializer(queryset, many=True).data
+            return SubProduct.objects.filter(id__in=[item['id'] for item in cached_data]).order_by('name')
+        # Only prefetch products, exclude business_hours, team_members, coupons
+        queryset = SubProduct.objects.all().prefetch_related('products').order_by('name')
+        serialized_data = SubProductSerializer(
+            queryset, 
+            many=True, 
+            context={'request': self.request, 'exclude_relations': True}
+        ).data
         cache.set(cache_key, serialized_data, timeout=3600)
         return queryset
 
