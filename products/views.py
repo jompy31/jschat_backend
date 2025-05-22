@@ -452,6 +452,20 @@ class ComboRetrieveUpdateDestroy(generics.RetrieveUpdateDestroyAPIView):
         instance.delete()
         cache.delete('combos_all')
 
+class ComboListBySubProductView(generics.ListAPIView):
+    serializer_class = ComboSerializer
+
+    def get_queryset(self):
+        subproduct_id = self.kwargs['subproduct_id']
+        cache_key = f'combos_subproduct_{subproduct_id}'
+        cached_data = cache.get(cache_key)
+        if cached_data:
+            return Combo.objects.filter(id__in=[item['id'] for item in cached_data])
+        queryset = Combo.objects.filter(subproduct_id=subproduct_id).prefetch_related('services')
+        serialized_data = ComboSerializer(queryset, many=True).data
+        cache.set(cache_key, serialized_data, timeout=3600)
+        return queryset
+
 class ProductListCreate(generics.ListCreateAPIView):
     serializer_class = ProductSerializer
     queryset = Product.objects.all().prefetch_related('characteristics', 'subproducts')
