@@ -31,7 +31,7 @@ class ResetPasswordSerializer(serializers.Serializer):
 
 class EmailSerializer(serializers.Serializer):
     subject = serializers.CharField(max_length=200)
-    message = serializers.CharField(max_length=1000)
+    message = serializers.CharField(max_length=4000)
     from_email = serializers.EmailField()
     recipient_list = serializers.CharField()  # Esto lo mantienes como una cadena
     attachments = serializers.ListField(child=serializers.FileField(), required=False)  # Esto es para archivos
