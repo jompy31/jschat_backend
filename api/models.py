@@ -56,7 +56,7 @@ class Skill(models.Model):
     
 class Lead(models.Model):
     # Campos requeridos del cliente
-    name = models.CharField(max_length=100)  # Nombre de la empresa
+    name = models.CharField(max_length=200)  # Nombre de la empresa
     email = models.EmailField()  # Correo electrónico de la empresa
     description = models.TextField()  # Descripción de la empresa
     number = models.CharField(max_length=20, blank=True, null=True)  # Número de contacto
@@ -64,7 +64,7 @@ class Lead(models.Model):
     
     # Campos adicionales (opcional)
     comments = models.ManyToManyField(User, through='Comment', related_name='lead_comments', blank=True)  # Comentarios sobre el lead
-    commercial_activity = models.CharField(max_length=100, blank=True, null=True)  # Actividad comercial de la empresa
+    commercial_activity = models.CharField(max_length=200, blank=True, null=True)  # Actividad comercial de la empresa
     priority = models.CharField(
         max_length=10,
         choices=(
@@ -83,44 +83,44 @@ class Lead(models.Model):
         ),
         default='nuevo', blank=True, null=True
     )  # Estado del lead
-    company_address = models.CharField(max_length=100, blank=True, null=True)  # Dirección de la empresa
+    company_address = models.CharField(max_length=200, blank=True, null=True)  # Dirección de la empresa
 
     # Información relacionada con la marca y marketing
-    brand_category = models.CharField(max_length=100, blank=True, null=True)  # Categoría de la marca
+    brand_category = models.CharField(max_length=200, blank=True, null=True)  # Categoría de la marca
     brand_description = models.TextField(blank=True, null=True)  # Descripción de la marca
     brand_differentiation = models.TextField(blank=True, null=True)  # Diferenciación de la marca
     brand_necessity = models.TextField(blank=True, null=True)  # Necesidad que satisface la marca
-    brand_perception_keywords = models.CharField(max_length=100, blank=True, null=True)  # Palabras clave de la marca
-    brand_personality = models.CharField(max_length=100, blank=True, null=True)  # Personalidad de la marca
-    brand_slogan_or_motto = models.CharField(max_length=100, blank=True, null=True)  # Eslogan de la marca
-    brand_style_preference = models.CharField(max_length=100, blank=True, null=True)  # Preferencia de estilo visual
+    brand_perception_keywords = models.CharField(max_length=200, blank=True, null=True)  # Palabras clave de la marca
+    brand_personality = models.CharField(max_length=200, blank=True, null=True)  # Personalidad de la marca
+    brand_slogan_or_motto = models.CharField(max_length=200, blank=True, null=True)  # Eslogan de la marca
+    brand_style_preference = models.CharField(max_length=200, blank=True, null=True)  # Preferencia de estilo visual
     brand_values = models.TextField(blank=True, null=True)  # Valores de la marca
     brand_virtues = models.TextField(blank=True, null=True)  # Virtudes de la marca
-    business_experience_duration = models.CharField(max_length=100, blank=True, null=True)  # Años de experiencia comercial
-    business_type = models.CharField(max_length=100, blank=True, null=True)  # Tipo de negocio de la empresa
-    colors = models.CharField(max_length=100, blank=True, null=True)  # Colores asociados a la marca
+    business_experience_duration = models.CharField(max_length=200, blank=True, null=True)  # Años de experiencia comercial
+    business_type = models.CharField(max_length=200, blank=True, null=True)  # Tipo de negocio de la empresa
+    colors = models.CharField(max_length=200, blank=True, null=True)  # Colores asociados a la marca
     commercial_information_details = models.TextField(blank=True, null=True)  # Detalles adicionales sobre la empresa
     company_logo = models.ImageField(upload_to='company_logos/', blank=True, null=True)  # Logo de la empresa
-    company_name = models.CharField(max_length=100, blank=True, null=True)  # Nombre completo de la empresa
+    company_name = models.CharField(max_length=200, blank=True, null=True)  # Nombre completo de la empresa
     company_website_or_social_media = models.URLField(blank=True, null=True)  # Sitio web o redes sociales de la empresa
 
     # Información de contacto del responsable
-    contact_person_name = models.CharField(max_length=100, blank=True, null=True)  # Nombre de la persona de contacto
+    contact_person_name = models.CharField(max_length=200, blank=True, null=True)  # Nombre de la persona de contacto
     contact_person_phone = models.CharField(max_length=20, blank=True, null=True)  # Teléfono de la persona de contacto
-    contact_person_position = models.CharField(max_length=100, blank=True, null=True)  # Puesto de la persona de contacto
+    contact_person_position = models.CharField(max_length=200, blank=True, null=True)  # Puesto de la persona de contacto
     contact_reason = models.TextField(blank=True, null=True)  # Razón por la que se contacta al cliente
     current_business_goals = models.TextField(blank=True, null=True)  # Metas comerciales actuales
     main_competitors = models.TextField(blank=True, null=True)  # Competidores principales
-    opening_hours_location_maps = models.CharField(max_length=100, blank=True, null=True)  # Horarios y ubicación en Google Maps
+    opening_hours_location_maps = models.CharField(max_length=200, blank=True, null=True)  # Horarios y ubicación en Google Maps
     payment_information = models.TextField(blank=True, null=True)  # Información adicional sobre métodos de pago
-    payment_method = models.CharField(max_length=50, blank=True, null=True)  # Métodos de pago disponibles
+    payment_method = models.CharField(max_length=100, blank=True, null=True)  # Métodos de pago disponibles
 
     # Segmentación del público objetivo
-    target_age_range = models.CharField(max_length=100, blank=True, null=True)  # Rango de edad objetivo
-    target_gender = models.CharField(max_length=20, blank=True, null=True)  # Género objetivo
+    target_age_range = models.CharField(max_length=200, blank=True, null=True)  # Rango de edad objetivo
+    target_gender = models.CharField(max_length=100, blank=True, null=True)  # Género objetivo
     target_interests = models.TextField(blank=True, null=True)  # Intereses del público objetivo
     target_lifecycle_stage = models.CharField(max_length=50, blank=True, null=True)  # Etapa del ciclo de vida del público
-    target_socioeconomic_level = models.CharField(max_length=100, blank=True, null=True)  # Nivel socioeconómico objetivo
+    target_socioeconomic_level = models.CharField(max_length=200, blank=True, null=True)  # Nivel socioeconómico objetivo
 
     def __str__(self):
         return self.name
