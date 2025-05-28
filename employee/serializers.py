@@ -4,6 +4,7 @@ from .models import (
     JobPosting, JobApplication, JobAlert
 )
 from django.contrib.auth.models import User
+from api.serializers import UserSerializer
 import random
 
 class CompanySerializer(serializers.ModelSerializer):
@@ -61,7 +62,7 @@ class JobPostingSerializer(serializers.ModelSerializer):
         fields = '__all__' 
 
 class JobApplicationSerializer(serializers.ModelSerializer):
-    applicant = serializers.EmailField()
+    applicant = UserSerializer(read_only=True)
 
     class Meta:
         model = JobApplication
