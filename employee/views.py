@@ -114,11 +114,30 @@ class JobPostingDetailView(generics.RetrieveUpdateDestroyAPIView):
 class JobApplicationCreateView(generics.CreateAPIView):
     queryset = JobApplication.objects.all()
     serializer_class = JobApplicationSerializer
+    permission_classes = [IsAuthenticated]  # Requiere autenticación
+    parser_classes = [MultiPartParser, FormParser]  # Soporte para archivos (resume)
 
     def post(self, request, *args, **kwargs):
         print("Datos recibidos:", request.data)  # Imprime los datos del cliente
         try:
-            return super().post(request, *args, **kwargs)
+            # Obtener el job_id desde la URL
+            job_id = self.kwargs.get('job_id')
+            job = get_object_or_404(JobPosting, id=job_id)
+            
+            # Agregar el job a los datos de la solicitud
+            mutable_data = request.data.copy()
+            mutable_data['job'] = job_id
+            
+            # Crear el serializador con el contexto de la solicitud
+            serializer = self.get_serializer(data=mutable_data, context={'request': request})
+            
+            if serializer.is_valid():
+                serializer.save()
+                return Response(serializer.data, status=status.HTTP_201_CREATED)
+            
+            print("Errores de validación:", serializer.errors)
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        
         except Exception as e:
             print(f"Error durante la creación: {e}")
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
@@ -135,7 +154,40 @@ class JobApplicationListView(generics.ListAPIView):
 class JobApplicationDetailView(generics.RetrieveUpdateDestroyAPIView):
     queryset = JobApplication.objects.all()
     serializer_class = JobApplicationSerializer
-    permission_classes = [IsAuthenticated]    
+    # permission_classes = [IsAuthenticated]
+    parser_classes = [MultiPartParser, FormParser]
+
+    def get_object(self):
+        job_id = self.kwargs.get('job_id')
+        pk = self.kwargs.get('pk')
+        print(f"Usuario autenticado: {self.request.user}")
+        obj = get_object_or_404(JobApplication, pk=pk, job_id=job_id)
+        if obj.applicant != self.request.user:
+            print(f"Acceso denegado: {self.request.user} no es el solicitante de {obj}")
+            self.permission_denied(
+                self.request,
+                message="No tienes permiso para editar o eliminar esta solicitud."
+            )
+        return obj
+
+    def update(self, request, *args, **kwargs):
+        print("Datos recibidos:", request.data)
+        try:
+            instance = self.get_object()
+            # No incluir job en los datos enviados al serializador
+            mutable_data = request.data.copy()
+            mutable_data.pop('job', None)  # Ignorar job si se envía
+            mutable_data.pop('applicant', None)  # Ignorar applicant si se envía
+            serializer = self.get_serializer(instance, data=mutable_data, partial=True, context={'request': request})
+            if serializer.is_valid():
+                serializer.save()
+                return Response(serializer.data, status=status.HTTP_200_OK)
+            print("Errores de validación:", serializer.errors)
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        except Exception as e:
+            print(f"Error durante la actualización: {e}")
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
 
 class JobAlertCreateView(APIView):
     permission_classes = [IsAuthenticated]

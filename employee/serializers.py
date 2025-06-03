@@ -63,20 +63,12 @@ class JobPostingSerializer(serializers.ModelSerializer):
 
 class JobApplicationSerializer(serializers.ModelSerializer):
     applicant = UserSerializer(read_only=True)
+    applicant_email = serializers.EmailField(write_only=True, required=False)
+    job = serializers.PrimaryKeyRelatedField(queryset=JobPosting.objects.all(), required=False)  # Hacer job opcional
 
     class Meta:
         model = JobApplication
-        fields = ['id', 'job', 'cover_letter', 'notes', 'status', 'applicant', 'resume']
-
-    def validate_applicant(self, value):
-        print(f"Validando applicant: {value}")
-        try:
-            user = User.objects.get(email=value)
-            print(f"Usuario encontrado: {user.email}")
-            return user.email
-        except User.DoesNotExist:
-            print("Usuario no encontrado.")
-            raise serializers.ValidationError("Este correo electrónico no está registrado.")
+        fields = ['id', 'job', 'cover_letter', 'notes', 'status', 'applicant', 'applicant_email', 'resume']
 
     def validate_resume(self, value):
         if not value:
@@ -85,13 +77,42 @@ class JobApplicationSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError("El archivo proporcionado no es válido.")
         return value
 
+    def validate(self, data):
+        # Solo validar job si se proporciona en los datos
+        job = data.get('job')
+        if job and not JobPosting.objects.filter(id=job.id).exists():
+            raise serializers.ValidationError("El trabajo especificado no existe.")
+        return data
+
     def create(self, validated_data):
         print(f"Datos validados recibidos para crear: {validated_data}")
-        applicant_email = validated_data.pop('applicant')
-        applicant = User.objects.get(email=applicant_email)
-        job_application = JobApplication.objects.create(applicant=applicant, **validated_data)
+        applicant_email = validated_data.pop('applicant_email', None)
+        request = self.context.get('request')
+        
+        if applicant_email:
+            try:
+                applicant = User.objects.get(email=applicant_email)
+            except User.DoesNotExist:
+                raise serializers.ValidationError("Este correo electrónico no está registrado.")
+        else:
+            if not request or not request.user.is_authenticated:
+                raise serializers.ValidationError("Se requiere autenticación para crear una solicitud de empleo.")
+            applicant = request.user
+
+        job_application = JobApplication.objects.create(
+            applicant=applicant,
+            **validated_data
+        )
         print(f"JobApplication creada: {job_application}")
         return job_application
+
+    def update(self, instance, validated_data):
+        # No permitir modificar applicant
+        validated_data.pop('applicant_email', None)
+        validated_data.pop('applicant', None)
+        # No modificar job si no se envía
+        validated_data.pop('job', None)
+        return super().update(instance, validated_data)
 
 
 
