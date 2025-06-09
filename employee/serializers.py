@@ -107,13 +107,40 @@ class JobApplicationSerializer(serializers.ModelSerializer):
         return job_application
 
     def update(self, instance, validated_data):
-        # No permitir modificar applicant
-        validated_data.pop('applicant_email', None)
-        validated_data.pop('applicant', None)
-        # No modificar job si no se envía
-        validated_data.pop('job', None)
-        return super().update(instance, validated_data)
+        print(f"Datos validados recibidos para actualizar: {validated_data}")
+        request = self.context.get('request')
+        applicant_email = validated_data.pop('applicant_email', None)
 
+        # Validar que el usuario autenticado sea el propietario de la JobApplication
+        if not request or not request.user.is_authenticated:
+            raise serializers.ValidationError("Se requiere autenticación para actualizar una solicitud de empleo.")
+        if instance.applicant != request.user:
+            raise serializers.ValidationError(
+                f"Acceso denegado: {request.user.email} no es el solicitante de {instance}"
+            )
+
+        # Opcional: Si se proporciona applicant_email, validar que coincida con el usuario autenticado
+        if applicant_email:
+            try:
+                applicant = User.objects.get(email=applicant_email)
+                if applicant != request.user:
+                    raise serializers.ValidationError(
+                        "El correo electrónico proporcionado no coincide con el usuario autenticado."
+                    )
+            except User.DoesNotExist:
+                raise serializers.ValidationError("Este correo electrónico no está registrado.")
+
+        # No permitir modificar applicant ni job (si no se desea)
+        validated_data.pop('applicant', None)
+        validated_data.pop('job', None)
+
+        # Actualizar los campos permitidos
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        instance.save()
+
+        print(f"JobApplication actualizada: {instance}")
+        return instance
 
 
 
