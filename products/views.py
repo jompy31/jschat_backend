@@ -11,6 +11,7 @@ from rest_framework.permissions import AllowAny
 from django.conf import settings
 from django.db.models import Prefetch
 from django.db.models import Prefetch, Q 
+from rapidfuzz import fuzz, process
 import logging
 from datetime import datetime
 import os
@@ -37,35 +38,94 @@ class SubProductSearchView(generics.ListAPIView):
             return SubProduct.objects.filter(id__in=[item['id'] for item in cached_data]).order_by('name')
         
         queryset = SubProduct.objects.all().prefetch_related('products')
-        
-        if query:
-            queryset = queryset.filter(
-                Q(name__icontains=query) |
-                Q(description__icontains=query) |
-                Q(country__icontains=query) |
-                Q(province__icontains=query) |
-                Q(canton__icontains=query) |
-                Q(distrito__icontains=query) |
-                Q(subcategory__icontains=query) |
-                Q(subsubcategory__icontains=query) |
-                Q(product_names__icontains=query)
-            )
-        
-        queryset = queryset.order_by('name')
-        serialized_data = SubProductSerializer(
-            queryset, 
-            many=True, 
-            context={'request': self.request, 'exclude_relations': True}
-        ).data
-        cache.set(cache_key, serialized_data, timeout=3600)
         return queryset
 
     def list(self, request, *args, **kwargs):
         try:
-            queryset = self.filter_queryset(self.get_queryset())
-            serializer = self.get_serializer(queryset, many=True)
-            logger.debug(f"Successfully fetched subproducts for query: {request.query_params.get('query', '')}")
-            return Response(serializer.data, status=status.HTTP_200_OK)
+            query = request.query_params.get('query', '').strip().lower()
+            cache_key = f'subproducts_search_{query}'
+            cached_data = cache.get(cache_key)
+            
+            if cached_data:
+                queryset = SubProduct.objects.filter(id__in=[item['id'] for item in cached_data]).order_by('name')
+                serializer = self.get_serializer(queryset, many=True)
+                return Response(serializer.data, status=status.HTTP_200_OK)
+
+            # Dividir la consulta en tokens
+            query_tokens = query.split()
+            
+            # Obtener todos los subproductos con prefetch de productos
+            queryset = self.get_queryset()
+            subproducts = list(queryset)
+            
+            if not query:
+                # Si no hay query, devolver todos los subproductos ordenados por nombre
+                serialized_data = SubProductSerializer(
+                    subproducts, 
+                    many=True, 
+                    context={'request': self.request, 'exclude_relations': True}
+                ).data
+                cache.set(cache_key, serialized_data, timeout=3600)
+                return Response(serialized_data, status=status.HTTP_200_OK)
+            
+            # Campos a buscar
+            search_fields = [
+                'name', 'description', 'province', 'canton', 'distrito', 
+                'subcategory', 'subsubcategory', 'product_names', 'email', 
+                'phone', 'phone_number', 'comercial_activity', 'url'
+            ]
+            
+            # Ponderaciones para cada campo (ajustar según importancia)
+            weights = {
+                'name': 2.0,          # Mayor peso para el nombre
+                'subcategory': 1.5,   # Peso alto para categoría
+                'province': 1.5,      # Peso alto para provincia
+                'comercial_activity': 1.2,
+                'description': 1.0,
+                'canton': 1.0,
+                'distrito': 1.0,
+                'subsubcategory': 1.0,
+                'product_names': 1.0,
+                'email': 0.8,
+                'phone': 0.8,
+                'phone_number': 0.8,
+                'url': 0.8
+            }
+            
+            # Calcular puntajes de relevancia
+            scored_subproducts = []
+            for subproduct in subproducts:
+                score = 0.0
+                max_field_score = 0.0
+                for field in search_fields:
+                    field_value = str(getattr(subproduct, field, '') or '').lower()
+                    if not field_value:
+                        continue
+                    # Calcular la máxima similitud para cada token
+                    field_score = max(
+                        fuzz.token_set_ratio(token, field_value) for token in query_tokens
+                    )
+                    # Ajustar el puntaje por el peso del campo
+                    score += field_score * weights.get(field, 1.0)
+                    max_field_score = max(max_field_score, field_score)
+                
+                # Solo incluir subproductos con alguna coincidencia relevante
+                if max_field_score > 50:  # Umbral de similitud mínima
+                    scored_subproducts.append((subproduct, score))
+            
+            # Ordenar por puntaje descendente
+            scored_subproducts.sort(key=lambda x: x[1], reverse=True)
+            sorted_subproducts = [sp[0] for sp in scored_subproducts]
+            
+            # Serializar los resultados
+            serializer = self.get_serializer(sorted_subproducts, many=True, context={'request': request, 'exclude_relations': True})
+            serialized_data = serializer.data
+            
+            # Guardar en caché
+            cache.set(cache_key, serialized_data, timeout=3600)
+            logger.debug(f"Successfully fetched subproducts for query: {query}")
+            return Response(serialized_data, status=status.HTTP_200_OK)
+        
         except Exception as e:
             logger.error(f"Error fetching subproducts for search: {str(e)}", exc_info=True)
             return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
