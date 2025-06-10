@@ -9,7 +9,8 @@ from .views import (
     CouponRetrieveUpdateDestroyView,
     SubProductByEmailView,
     PointOfSaleSubProductList,
-    ComboListBySubProductView
+    ComboListBySubProductView,
+    SubProductSearchView 
 )
 
 urlpatterns = [
@@ -24,6 +25,7 @@ urlpatterns = [
     path('subproducts/by-email/<str:email>/', SubProductByEmailView.as_view(), name='subproduct-by-email'),  # New endpoint
     path('subproducts/<int:subproduct_id>/services/', views.SubProductServicesView.as_view(), name='subproduct-services'),
     path('subproducts/<int:subproducts_id>/services/<int:service_id>/', views.ServiceDeleteView.as_view()),
+    path('subproducts/search/', SubProductSearchView.as_view(), name='subproduct-search'), 
 
     path('services/', views.SubProductServicesListAll.as_view(), name='all-services-list'),
 

@@ -10,6 +10,7 @@ from django.core.files.storage import default_storage
 from rest_framework.permissions import AllowAny
 from django.conf import settings
 from django.db.models import Prefetch
+from django.db.models import Prefetch, Q 
 import logging
 from datetime import datetime
 import os
@@ -22,6 +23,52 @@ from .serializers import (
 
 # Configura el logger
 logger = logging.getLogger(__name__)
+
+class SubProductSearchView(generics.ListAPIView):
+    permission_classes = [AllowAny]
+    serializer_class = SubProductSerializer
+    
+    def get_queryset(self):
+        query = self.request.query_params.get('query', '').strip()
+        cache_key = f'subproducts_search_{query}'
+        cached_data = cache.get(cache_key)
+        
+        if cached_data:
+            return SubProduct.objects.filter(id__in=[item['id'] for item in cached_data]).order_by('name')
+        
+        queryset = SubProduct.objects.all().prefetch_related('products')
+        
+        if query:
+            queryset = queryset.filter(
+                Q(name__icontains=query) |
+                Q(description__icontains=query) |
+                Q(country__icontains=query) |
+                Q(province__icontains=query) |
+                Q(canton__icontains=query) |
+                Q(distrito__icontains=query) |
+                Q(subcategory__icontains=query) |
+                Q(subsubcategory__icontains=query) |
+                Q(product_names__icontains=query)
+            )
+        
+        queryset = queryset.order_by('name')
+        serialized_data = SubProductSerializer(
+            queryset, 
+            many=True, 
+            context={'request': self.request, 'exclude_relations': True}
+        ).data
+        cache.set(cache_key, serialized_data, timeout=3600)
+        return queryset
+
+    def list(self, request, *args, **kwargs):
+        try:
+            queryset = self.filter_queryset(self.get_queryset())
+            serializer = self.get_serializer(queryset, many=True)
+            logger.debug(f"Successfully fetched subproducts for query: {request.query_params.get('query', '')}")
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        except Exception as e:
+            logger.error(f"Error fetching subproducts for search: {str(e)}", exc_info=True)
+            return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 class SubProductByEmailView(APIView):
     def get(self, request, email, format=None):
