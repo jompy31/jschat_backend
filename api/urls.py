@@ -1,37 +1,28 @@
 from django.urls import path, include
-from . import views
+from rest_framework.routers import DefaultRouter
 from .views import (
-    WorkExperienceListCreateView,
-    WorkExperienceRetrieveUpdateDestroyView,
-    SkillListCreateView,
-    SkillRetrieveUpdateDestroyView,
+    UserViewSet, CustomerViewSet, OrderViewSet, PromotionViewSet,
+    CustomerPointsViewSet, ProductionQueueViewSet, SignupAPIView,
+    LoginAPIView, ResetPasswordAPIView, ResetPasswordUser, InactiveOrdersAPIView,
+    DashboardAPIView, ProductionQueueDashboardAPIView
 )
 
+router = DefaultRouter()
+router.register(r'users', UserViewSet)
+router.register(r'customers', CustomerViewSet)
+router.register(r'orders', OrderViewSet)
+router.register(r'promotions', PromotionViewSet)
+router.register(r'customer-points', CustomerPointsViewSet)
+router.register(r'production-queues', ProductionQueueViewSet)
 
 urlpatterns = [
-    path('todos/', views.TodoListCreate.as_view()),
-    path('todos/<int:pk>', views.TodoRetrieveUpdateDestroy.as_view()),
-    path('todos/<int:pk>/complete', views.TodoToggleComplete.as_view()),
-    path('signup/', views.signup),
-    path('login/', views.login),
-    path('reset_password/', views.ResetPasswordAPIView.as_view(), name='reset_password'),
-    path('reset_password_user/<str:reset_token>/', views.ResetPasswordUser.as_view(), name='reset_password_user'),
-    path('users/', views.UserList.as_view()), 
-    path('users/<int:pk>/', views.UserDetail.as_view()),
-    path('users/<int:pk>/update/', views.UserUpdate.as_view()),
-    path('users/<int:pk>/delete/', views.UserDelete.as_view()),
-    path('leads/', views.LeadCreate.as_view()),
-    path('leads/<int:pk>/', views.LeadRetrieveUpdateDestroy.as_view()),
-    path('leads/<int:pk>/comments/', views.CommentListCreate.as_view()),
-    path('leads/comments/<int:pk>/', views.CommentRetrieveUpdateDestroy.as_view()),
-    path('leads/comments/<int:pk>/<int:comment_pk>/', views.CommentRetrieveUpdateDestroy.as_view()),
-    path('blog/', include('blog.urls')),
-
-     # WorkExperience URLs
-    path('work-experience/', WorkExperienceListCreateView.as_view(), name='work-experience-list-create'),
-    path('work-experience/<int:pk>/', WorkExperienceRetrieveUpdateDestroyView.as_view(), name='work-experience-detail'),
-
-    # Skill URLs
-    path('skills/', SkillListCreateView.as_view(), name='skill-list-create'),
-    path('skills/<int:pk>/', SkillRetrieveUpdateDestroyView.as_view(), name='skill-detail'),
+    path('', include(router.urls)),
+    path('signup/', SignupAPIView.as_view(), name='signup'),
+    path('login/', LoginAPIView.as_view(), name='login'),
+    path('reset_password/', ResetPasswordAPIView.as_view(), name='reset_password'),
+    path('reset_password_user/<str:reset_token>/', ResetPasswordUser.as_view(), name='reset_password_user'),
+    path('inactive-orders/', InactiveOrdersAPIView.as_view(), name='inactive_orders'),
+    path('dashboard/', DashboardAPIView.as_view(), name='dashboard'),
+    path('production-queue-dashboard/', ProductionQueueDashboardAPIView.as_view(), name='production_queue_dashboard'),
+    path('orders/<int:pk>/events/<int:event_id>/', OrderViewSet.as_view({'put': 'update_event', 'delete': 'delete_event'}), name='order-event-detail'),
 ]

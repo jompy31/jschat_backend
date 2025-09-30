@@ -34,19 +34,14 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'corsheaders',
-    'todo',
     'rest_framework',
     'api',
+    'todo',
     'files',
-    'shipping',
     'products',
+    'blog',
     'rest_framework.authtoken',
     'ckeditor',
-    'blog',
-    'employee',
-    'news',
-    'affiliated_stores',
-    'tourism',
     'django_redis',  # Añadido para Redis
     'django_celery_results',  # Añadido para Celery
 ]
@@ -103,14 +98,21 @@ WSGI_APPLICATION = 'backend.wsgi.application'
 #         'NAME': BASE_DIR / os.getenv('DATABASE_NAME'),
 #     }
 # }
+# DATABASES = {
+#     'default': {
+#         'ENGINE': os.getenv('DATABASE_ENGINE', 'django.db.backends.postgresql'),
+#         'NAME': os.getenv('DATABASE_NAME', 'myproject'),
+#         'USER': os.getenv('DATABASE_USER', 'postgres'),
+#         'PASSWORD': os.getenv('DATABASE_PASSWORD', 'Nuevavida2019'),
+#         'HOST': os.getenv('DATABASE_HOST', 'localhost'),
+#         'PORT': os.getenv('DATABASE_PORT', '5432'),
+#     }
+# }
+
 DATABASES = {
     'default': {
-        'ENGINE': os.getenv('DATABASE_ENGINE', 'django.db.backends.postgresql'),
-        'NAME': os.getenv('DATABASE_NAME', 'myproject'),
-        'USER': os.getenv('DATABASE_USER', 'postgres'),
-        'PASSWORD': os.getenv('DATABASE_PASSWORD', 'Nuevavida2019'),
-        'HOST': os.getenv('DATABASE_HOST', 'localhost'),
-        'PORT': os.getenv('DATABASE_PORT', '5432'),
+        'ENGINE': 'django.db.backends.sqlite3',
+        'NAME': BASE_DIR / 'db.sqlite3',
     }
 }
 

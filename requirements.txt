@@ -4,3 +4,9 @@ django-ckeditor
 djangorestframework
 Pillow
 gunicorn
+reportlab
+requests
+dotenv
+django_redis
+django_celery_results
+whitenoise
