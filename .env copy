@@ -1,0 +1,67 @@
+# Entorno de ejecución
+NODE_ENV=production
+
+# URLs del backend y frontend
+# BACKEND_URL=http://localhost:5000  # Node.js backend on port 5000
+# FRONTEND_URL=http://localhost:3000  # React frontend on port 4000 (changed from 3000 to avoid conflict)
+BACKEND_URL=https://dirlux.com/programas/backendcrm/
+FRONTEND_URL=https://dirlux.com/programas/crm
+SSL_CRT_FILE=./certs/localhost.pem
+SSL_KEY_FILE=./certs/localhost-key.pem
+
+# Puertos
+PROXY_PORT=443  # Nginx proxy port
+PORT=5000  # Node.js backend port
+DB_PORT=5432  # PostgreSQL port
+
+# Configuración de la base de datos
+DB_DIALECT=postgres
+DB_HOST=localhost
+DB_PORT=5432
+DB_USER=postgres
+DB_PASS=Nuevavida2019
+DB_NAME=dirlux_whaticket
+
+# Configuración de la base de datos (AWS RDS, commented out as we’re using local PostgreSQL)
+# DB_DIALECT=postgres
+# DB_HOST=my-db-abchat.cnwiskuw2x6t.us-east-2.rds.amazonaws.com
+# DB_USER=postgres
+# DB_PASS=abcupon2024
+
+# Configuración de JWT para autenticación
+JWT_SECRET=kZaOTd+YZpjRUyyuQUpigJaEMk4vcW4YOymKPZX0Ts8=
+JWT_REFRESH_SECRET=dBSXqFg9TaNUEDXVp6fhMTRLBysP+j2DSqf7+raxD3A=
+
+# Configuración de Redis
+REDIS_URI=redis://127.0.0.1:6379  # Local Redis, no password
+REDIS_OPT_LIMITER_MAX=1
+REDIS_OPT_LIMITER_DURATION=3000
+
+COMPANY_TOKEN=whaticket
+PERFEX_URL=
+PERFEX_MODULE=
+
+VERIFY_TOKEN=whaticket
+
+#METODOS DE PAGAMENTO
+STRIPE_PRIVATE=
+STRIPE_OK_URL=BACKEND_URL/subscription/stripewebhook
+STRIPE_CANCEL_URL=FRONTEND_URL/financeiro
+MP_ACCESS_TOKEN=
+MP_NOTIFICATION_URL=BACKEND_URL/subscription/mercadopagowebhook
+ASAAS_TOKEN=
+GERENCIANET_SANDBOX=false
+GERENCIANET_CLIENT_ID=
+GERENCIANET_CLIENT_SECRET=
+GERENCIANET_PIX_CERT=
+GERENCIANET_PIX_KEY=
+
+FACEBOOK_APP_ID=2813216208828642
+FACEBOOK_APP_SECRET=8233912aeade366dd8e2ebef6be256b6
+
+# EMAIL
+MAIL_HOST="smtp.gmail.com"
+MAIL_USER="seu@gmail.com"
+MAIL_PASS="SuaSenha"
+MAIL_FROM="seu@gmail.com"
+MAIL_PORT="465"

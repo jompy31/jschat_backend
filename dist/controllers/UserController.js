@@ -88,14 +88,14 @@ const store = async (req, res) => {
         try {
             const _email = {
                 to: email,
-                subject: `Login e senha da Empresa ${companyName}`,
-                text: `Olá ${name}, este é um email sobre o cadastro da ${companyName}!<br><br>
-        Segue os dados da sua empresa:<br><br>Nome: ${companyName}<br>Email: ${email}<br>Senha: ${password}<br>Data Vencimento Trial: ${dateToClient(date)}`
+                subject: `Nombre de usuario y contraseña de la empresa ${companyName}`,
+                text: `Hola ${name}, este es un correo electrónico sobre el registro de ${companyName}!<br><br>
+        Aquí tienes los datos de tu empresa:<br><br>Nombre: ${companyName}<br>Correo electrónico: ${email}<br>Contraseña: ${password}<br>Fecha de vencimiento de la prueba: ${dateToClient(date)}`
             };
             await (0, SendMail_1.SendMail)(_email);
         }
         catch (error) {
-            console.log('Não consegui enviar o email');
+            console.log('No pude enviar el correo electrónico');
         }
         try {
             const company = await (0, ShowCompanyService_1.default)(1);
@@ -103,12 +103,12 @@ const store = async (req, res) => {
             if (whatsappCompany.whatsapps[0].status === "CONNECTED" && (phone !== undefined || !(0, lodash_1.isNil)(phone) || !(0, lodash_1.isEmpty)(phone))) {
                 const whatsappId = whatsappCompany.whatsapps[0].id;
                 const wbot = (0, wbot_1.getWbot)(whatsappId);
-                const body = `Olá ${name}, este é uma mensagem sobre o cadastro da ${companyName}!\n\nSegue os dados da sua empresa:\n\nNome: ${companyName}\nEmail: ${email}\nSenha: ${password}\nData Vencimento Trial: ${dateToClient(date)}`;
-                await wbot.sendMessage(`55${phone}@s.whatsapp.net`, { text: body });
+                const body = `Hola ${name}, este es un correo electrónico sobre el registro de ${companyName}!\n\nAquí tienes los datos de tu empresa:\n\nNombre: ${companyName}\nCorreo electrónico: ${email}<br>Contraseña: ${password}<br>Fecha de vencimiento de la prueba: ${dateToClient(date)}`;
+                await wbot.sendMessage(`506${phone}@s.whatsapp.net`, { text: body });
             }
         }
         catch (error) {
-            console.log('Não consegui enviar a mensagem');
+            console.log('No pude enviar el mensaje');
         }
         return res.status(200).json(user);
     }
@@ -234,7 +234,7 @@ const remove = async (req, res) => {
         where: { id: userId }
     });
     if (companyId !== user.companyId) {
-        return res.status(400).json({ error: "Você não possui permissão para acessar este recurso!" });
+        return res.status(400).json({ error: "¡No tienes permiso para acceder a este recurso!" });
     }
     else {
         await (0, DeleteUserService_1.default)(userId, companyId);
@@ -273,7 +273,7 @@ const mediaUpload = async (req, res) => {
             action: "update",
             user
         });
-        return res.status(200).json({ user, message: "Imagem atualizada" });
+        return res.status(200).json({ user, message: "Imagen atualizada" });
     }
     catch (err) {
         throw new AppError_1.default(err.message);
