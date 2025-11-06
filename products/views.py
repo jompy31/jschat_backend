@@ -48,14 +48,21 @@ class ProductViewSet(viewsets.ModelViewSet):
         return [IsAdminOrSalesOrDesign()]
     
     def dispatch(self, request, *args, **kwargs):
+        # === DEBUG: Información de la solicitud ===
+        logger.debug("="*60)
+        logger.debug(f"MÉTODO: {request.method}")
+        logger.debug(f"URL: {request.path}")
+        logger.debug(f"Content-Type: {request.content_type}")
+        logger.debug(f"request.FILES: {bool(request.FILES)}")
+        logger.debug(f"request.body (raw): {type(request.body)} -> {len(request.body) if request.body else 0} bytes")
         # Extract request data safely
-        data = getattr(request, 'data', request.POST or request.body)
-        if isinstance(data, bytes):
-            try:
-                data = json.loads(data.decode('utf-8'))
-            except json.JSONDecodeError:
-                data = request.POST or {}
-        logger.debug(f"Solicitud recibida en ProductViewSet: Método={request.method}, URL={request.path}, Datos={data}, Archivos={request.FILES}")
+        # data = getattr(request, 'data', request.POST or request.body)
+        # if isinstance(data, bytes):
+        #     try:
+        #         data = json.loads(data.decode('utf-8'))
+        #     except json.JSONDecodeError:
+        #         data = request.POST or {}
+        # logger.debug(f"Solicitud recibida en ProductViewSet: Método={request.method}, URL={request.path}, Datos={data}, Archivos={request.FILES}")
         return super().dispatch(request, *args, **kwargs)
     
     def create(self, request, *args, **kwargs):
