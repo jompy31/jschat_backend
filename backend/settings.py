@@ -92,29 +92,29 @@ TEMPLATES = [
 WSGI_APPLICATION = 'backend.wsgi.application'
 
 # Database
-# DATABASES = {
-#     'default': {
-#         'ENGINE': os.getenv('DATABASE_ENGINE'),
-#         'NAME': BASE_DIR / os.getenv('DATABASE_NAME'),
-#     }
-# }
-# DATABASES = {
-#     'default': {
-#         'ENGINE': os.getenv('DATABASE_ENGINE', 'django.db.backends.postgresql'),
-#         'NAME': os.getenv('DATABASE_NAME', 'myproject'),
-#         'USER': os.getenv('DATABASE_USER', 'postgres'),
-#         'PASSWORD': os.getenv('DATABASE_PASSWORD', 'Nuevavida2019'),
-#         'HOST': os.getenv('DATABASE_HOST', 'localhost'),
-#         'PORT': os.getenv('DATABASE_PORT', '5432'),
-#     }
-# }
-
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+        'ENGINE': os.getenv('DATABASE_ENGINE'),
+        'NAME': BASE_DIR / os.getenv('DATABASE_NAME'),
     }
 }
+DATABASES = {
+    'default': {
+        'ENGINE': os.getenv('DATABASE_ENGINE', 'django.db.backends.postgresql'),
+        'NAME': os.getenv('DATABASE_NAME', 'myproject'),
+        'USER': os.getenv('DATABASE_USER', 'postgres'),
+        'PASSWORD': os.getenv('DATABASE_PASSWORD', 'Nuevavida2019'),
+        'HOST': os.getenv('DATABASE_HOST', 'localhost'),
+        'PORT': os.getenv('DATABASE_PORT', '5432'),
+    }
+}
+
+# DATABASES = {
+#     'default': {
+#         'ENGINE': 'django.db.backends.sqlite3',
+#         'NAME': BASE_DIR / 'db.sqlite3',
+#     }
+# }
 
 # Password validation
 AUTH_PASSWORD_VALIDATORS = [
