@@ -1570,7 +1570,7 @@ class ResetPasswordAPIView(APIView):
                 token, _ = Token.objects.get_or_create(user=user)
                 current_site = get_current_site(request)
                 reset_url = reverse('reset_password_user', kwargs={'reset_token': token.key})
-                reset_password_url = f"https://{current_site.domain}{reset_url}"
+                reset_password_url = f"https://dirlux.com/programas/jsportapp/reset_password_user/{reset_url}"
                 send_mail(
                     subject='Restablecer contraseña',
                     message=f"Haga clic en el siguiente enlace para restablecer su contraseña:\n{reset_password_url}",
