@@ -82,6 +82,12 @@ class UserViewSet(viewsets.ModelViewSet):
     serializer_class = UserSerializer
     permission_classes = [permissions.IsAuthenticated]
 
+    @action(detail=False, methods=['get'], url_path='me')
+    def me(self, request):
+        """Devuelve el usuario autenticado con su UserProfile completo"""
+        serializer = self.get_serializer(request.user)
+        return Response(serializer.data)
+
     def get_queryset(self):
         logger.debug(f"User {self.request.user} accessing UserViewSet.get_queryset")
         if self.request.user.userprofile.staff_status == 'administrator':
@@ -630,6 +636,11 @@ class OrderViewSet(viewsets.ModelViewSet):
 class PromotionViewSet(viewsets.ModelViewSet):
     queryset = Promotion.objects.all()
     serializer_class = PromotionSerializer
+    
+    def get_permissions(self):
+        if self.action in ['list', 'retrieve']:
+            return [permissions.AllowAny()]  # Permitir a cualquiera para GET (lista y detalle)
+        return [IsAdminOrSales()]
 
     def create(self, request, *args, **kwargs):
         logger.debug(f"PromotionViewSet.create() - Raw request data: {json_safe_dump(request.data)}")
@@ -925,20 +936,20 @@ class ProductionQueueDashboardAPIView(APIView):
         
         # Financial Metrics
         total_revenue = OrderItem.objects.filter(
-            order__order_date__gte=start_date,
-            order__order_date__lte=end_date
+        order__order_date__gte=start_date,
+        order__order_date__lte=end_date
         ).annotate(
             item_revenue=ExpressionWrapper(
                 F('quantity') * F('unit_price'),
                 output_field=DecimalField(max_digits=12, decimal_places=2)
             )
-        ).aggregate(total=Sum('item_revenue'))['total'] or 0.0
-        
+        ).aggregate(total=Sum('item_revenue'))['total'] or Decimal('0.0')
+
         total_payments = Payment.objects.filter(
             payment_date__gte=start_date,
             payment_date__lte=end_date
-        ).aggregate(total=Sum('amount'))['total'] or 0.0
-        
+        ).aggregate(total=Sum('amount'))['total'] or Decimal('0.0')
+
         total_owed = float(total_revenue - total_payments)
         
         monthly_revenue_qs = OrderItem.objects.filter(
@@ -1569,8 +1580,7 @@ class ResetPasswordAPIView(APIView):
                 user = User.objects.get(email=email)
                 token, _ = Token.objects.get_or_create(user=user)
                 current_site = get_current_site(request)
-                reset_url = reverse('reset_password_user', kwargs={'reset_token': token.key})
-                reset_password_url = f"https://dirlux.com/programas/jsportapp/reset_password_user/{reset_url}"
+                reset_password_url = f"https://dirlux.com/programas/jsportapp/reset_password_user/{token.key}"
                 send_mail(
                     subject='Restablecer contraseña',
                     message=f"Haga clic en el siguiente enlace para restablecer su contraseña:\n{reset_password_url}",
@@ -1586,29 +1596,30 @@ class ResetPasswordAPIView(APIView):
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 class ResetPasswordUser(APIView):
-    serializer_class = UserSerializer
     permission_classes = [permissions.AllowAny]
 
     def get_object(self, reset_token):
         try:
             return Token.objects.get(key=reset_token).user
         except Token.DoesNotExist:
-            logger.error(f"Invalid reset token: {reset_token}")
             return None
 
     def post(self, request, reset_token):
-        logger.debug(f"Reset password user request data: {request.data}, token: {reset_token}")
         user = self.get_object(reset_token)
         if not user:
-            return Response({'error': 'Token de restablecimiento inválido.'}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({'error': 'Token inválido o expirado.'}, status=status.HTTP_400_BAD_REQUEST)
 
-        serializer = UserSerializer(user, data=request.data, partial=True)
-        if serializer.is_valid():
-            serializer.save()
-            logger.info(f"Password reset for user {user.username}")
-            return Response({'message': 'Contraseña actualizada correctamente.'}, status=status.HTTP_200_OK)
-        logger.error(f"Password reset validation error: {serializer.errors}")
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        new_password = request.data.get('password')
+        if not new_password:
+            return Response({'error': 'Se requiere la nueva contraseña.'}, status=400)
+
+        user.set_password(new_password)
+        user.save()
+
+        # Opcional: eliminar el token usado
+        Token.objects.filter(user=user).delete()
+
+        return Response({'message': 'Contraseña cambiada exitosamente.'}, status=status.HTTP_200_OK)
 
 class EmailAPIView(APIView):
     def post(self, request):

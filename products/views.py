@@ -19,11 +19,11 @@ class IsAdminOrSalesOrDesign(permissions.BasePermission):
 
 class ProductTypeViewSet(viewsets.ModelViewSet):
     queryset = ProductType.objects.all()
-    serializer_class = ProductTypeSerializer
+    serializer_class = ProductTypeSerializer 
     
     def get_permissions(self):
         if self.action in ['list', 'retrieve']:
-            return [permissions.IsAuthenticated()]
+            return [permissions.AllowAny()]
         return [IsAdminOrSalesOrDesign()]
     
     def perform_create(self, serializer):
@@ -35,7 +35,7 @@ class CharacteristicViewSet(viewsets.ModelViewSet):
     
     def get_permissions(self):
         if self.action in ['list', 'retrieve']:
-            return [permissions.IsAuthenticated()]
+            return [permissions.AllowAny()]
         return [IsAdminOrSalesOrDesign()]
 
 class ProductViewSet(viewsets.ModelViewSet):
@@ -44,7 +44,7 @@ class ProductViewSet(viewsets.ModelViewSet):
     
     def get_permissions(self):
         if self.action in ['list', 'retrieve']:
-            return [permissions.IsAuthenticated()]
+            return [permissions.AllowAny()]
         return [IsAdminOrSalesOrDesign()]
     
     def dispatch(self, request, *args, **kwargs):
@@ -54,7 +54,7 @@ class ProductViewSet(viewsets.ModelViewSet):
         logger.debug(f"URL: {request.path}")
         logger.debug(f"Content-Type: {request.content_type}")
         logger.debug(f"request.FILES: {bool(request.FILES)}")
-        logger.debug(f"request.body (raw): {type(request.body)} -> {len(request.body) if request.body else 0} bytes")
+        # logger.debug(f"request.body (raw): {type(request.body)} -> {len(request.body) if request.body else 0} bytes")
         # Extract request data safely
         # data = getattr(request, 'data', request.POST or request.body)
         # if isinstance(data, bytes):
