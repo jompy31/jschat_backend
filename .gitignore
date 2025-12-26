@@ -1,14 +1,11 @@
 # dependencies
-/abcupon-env/
-/abcupon-env
-abcupon-env
 /venv
 /node_modules
 /.pnp
 .pnp.js
 # Archivos pesados y temporales
-/media
-/media/
+# /media
+# /media/
 db.sqlite3
 db copy.sqlite3
 *.log
